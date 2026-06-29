@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"E:/学习管理系统/teamsync-mvp-server/src/main/java/com/teamsync/{config,controller,service,mapper,entity,dto,vo,common}\")",
+      "Bash(mkdir -p \"E:/学习管理系统/teamsync-mvp-server/src/main/resources\")",
+      "Bash(mysql *)",
+      "Bash(curl -s http://localhost:8080)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s http://localhost:8080/swagger-ui.html -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:8080/api/schedule/dashboard)",
+      "Bash(./mvnw compile *)",
+      "Bash(mvn --version)",
+      "Bash(mvn compile *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(npx vite *)",
+      "Bash(mvn clean *)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(tasklist /FI \"IMAGENAME eq node.exe\")",
+      "Bash(wmic process *)",
+      "Bash(taskkill //F //PID 29212)",
+      "Bash(taskkill //F //PID 56408)",
+      "Bash(ps -p 11464 -o pid,ppid,comm,args)",
+      "Bash(ps -p 7456 -o pid,ppid,comm,args)",
+      "Bash(tasklist //FI \"PID eq 11464\" //FO LIST)",
+      "Bash(tasklist //FI \"PID eq 7456\" //FO LIST)",
+      "Bash(kill 11464)",
+      "Bash(kill 7456)",
+      "Bash(ps -p 11464 -o pid,comm)",
+      "Bash(ps -p 7456 -o pid,comm)"
+    ]
+  }
+}

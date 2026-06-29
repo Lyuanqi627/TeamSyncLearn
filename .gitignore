@@ -1,0 +1,24 @@
+# Java
+teamsync-mvp-server/target/
+teamsync-mvp-server/*.jar
+teamsync-mvp-server/*.log
+
+# Node
+teamsync-mvp-web/node_modules/
+teamsync-mvp-web/dist/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
+
+# Env
+.env
+.env.local
