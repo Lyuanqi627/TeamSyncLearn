@@ -16,7 +16,7 @@
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover" class="stat-card warning">
+        <el-card shadow="hover" class="stat-card warning clickable" @click="goToUpload">
           <div class="stat-value">{{ dashboard.pendingSchedules }}</div>
           <div class="stat-label">待开始</div>
         </el-card>
@@ -49,7 +49,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, onBeforeUnmount } from 'vue'
 import { getDashboard } from '@/api/schedule'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
+
+const router = useRouter()
 
 const dashboard = ref<any>({
   totalSchedules: 0, completedSchedules: 0, pendingSchedules: 0,
@@ -72,6 +75,10 @@ async function fetchDashboard() {
     dashboard.value = res.data
     renderCharts()
   }
+}
+
+function goToUpload() {
+  router.push('/upload')
 }
 
 function renderCharts() {
@@ -126,6 +133,8 @@ onBeforeUnmount(() => {
 .page-title { margin-bottom: 20px; font-size: 20px; color: #303133; }
 .stat-cards { margin-bottom: 20px; }
 .stat-card { text-align: center; }
+.stat-card.clickable { cursor: pointer; transition: transform 0.15s; }
+.stat-card.clickable:hover { transform: translateY(-2px); }
 .stat-value { font-size: 32px; font-weight: bold; color: #303133; }
 .stat-label { font-size: 14px; color: #909399; margin-top: 4px; }
 .success .stat-value { color: #67c23a; }
