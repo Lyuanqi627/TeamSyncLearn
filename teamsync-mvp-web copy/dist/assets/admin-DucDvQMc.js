@@ -1,0 +1,1 @@
+import{r}from"./request-C3EF3-96.js";function a(){return r.get("/api/admin/teamboard")}function n(e){return r.get("/api/admin/wordcloud",{params:e})}function o(e){return r.get(`/api/admin/member/${e}`)}export{n as a,o as b,a as g};

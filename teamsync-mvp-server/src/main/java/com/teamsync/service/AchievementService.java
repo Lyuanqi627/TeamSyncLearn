@@ -1,6 +1,25 @@
 package com.teamsync.service;
 
-import cn.hutool.core.util.IdUtil;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.teamsync.common.UserContext;
 import com.teamsync.dto.AchievementDTO;
@@ -10,23 +29,9 @@ import com.teamsync.entity.Schedule;
 import com.teamsync.mapper.AchievementItemMapper;
 import com.teamsync.mapper.AchievementMapper;
 import com.teamsync.mapper.ScheduleMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
+import cn.hutool.core.util.IdUtil;
 import jakarta.annotation.PostConstruct;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class AchievementService {
@@ -49,7 +54,7 @@ public class AchievementService {
                               JdbcTemplate jdbcTemplate) {
         this.achievementMapper = achievementMapper;
         this.achievementItemMapper = achievementItemMapper;
-        this.scheduleMapper = scheduleMapper;
+         this.scheduleMapper = scheduleMapper;
         this.aiEvaluationService = aiEvaluationService;
         this.jdbcTemplate = jdbcTemplate;
     }

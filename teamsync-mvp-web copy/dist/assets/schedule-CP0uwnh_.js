@@ -1,0 +1,1 @@
+import{r as t}from"./request-C3EF3-96.js";function r(e){return t.get("/api/schedule/list",{params:e})}function s(e){return t.post("/api/schedule",e)}function c(e,u){return t.put(`/api/schedule/${e}`,u)}function d(e){return t.delete(`/api/schedule/${e}`)}function n(e){return t.get("/api/schedule/dashboard",{params:{userId:e}})}export{r as a,s as c,d,n as g,c as u};

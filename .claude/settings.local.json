@@ -26,7 +26,8 @@
       "Bash(kill 11464)",
       "Bash(kill 7456)",
       "Bash(ps -p 11464 -o pid,comm)",
-      "Bash(ps -p 7456 -o pid,comm)"
+      "Bash(ps -p 7456 -o pid,comm)",
+      "Bash(npx tsc *)"
     ]
   }
 }

@@ -81,7 +81,7 @@
                 <el-tag size="small" type="primary">
                   {{ item.contentType === 'TEXT' ? '纯文本' : 'Markdown' }}
                 </el-tag>
-                <span class="item-index">#{{ i + 1 }}</span>
+                <span class="item-index">#{{ Number(i) + 1 }}</span>
               </div>
               <div v-if="item.content" class="item-content">{{ item.content }}</div>
             </div>
