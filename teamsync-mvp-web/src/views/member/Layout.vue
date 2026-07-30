@@ -59,6 +59,10 @@
             <el-icon><Document /></el-icon>
             <span>学习总结</span>
           </el-menu-item>
+          <el-menu-item index="/ai-assistant">
+            <el-icon><MagicStick /></el-icon>
+            <span>AI助手</span>
+          </el-menu-item>
         </el-menu>
       </aside>
 
@@ -73,7 +77,7 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessageBox } from 'element-plus'
-import { DataBoard, Calendar, Upload, Document, Setting, UserFilled } from '@element-plus/icons-vue'
+import { DataBoard, Calendar, Upload, Document, MagicStick, Setting, UserFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
