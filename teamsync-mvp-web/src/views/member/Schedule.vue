@@ -286,8 +286,20 @@ onMounted(fetchAllSchedules)
 }
 .page-title { font-size: 20px; color: #303133; margin: 0; }
 .calendar-card { margin-bottom: 20px; }
+/* ===== 紧凑日历：限宽居中 + 缩小单元格/表头 ===== */
+.calendar-card :deep(.el-calendar) {
+  --el-calendar-cell-width: auto;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.calendar-card :deep(.el-calendar-table) { table-layout: fixed; }
+.calendar-card :deep(.el-calendar-table td) { padding: 0; }
 /* Make el-calendar-day padding transparent so .calendar-cell fills the entire td */
-:deep(.el-calendar-day) { padding: 0; }
+.calendar-card :deep(.el-calendar-day) { padding: 0; height: 44px; }
+.calendar-card :deep(.el-calendar-table thead th) { padding: 4px 0; font-size: 12px; color: #909399; }
+.calendar-card :deep(.el-calendar__header) { padding: 8px 12px; }
+.calendar-card :deep(.el-calendar__title) { font-size: 14px; }
+.calendar-card :deep(.el-calendar__button-group) .el-button-group { transform: scale(0.9); transform-origin: right center; }
 .calendar-cell {
   width: 100%;
   height: 100%;
