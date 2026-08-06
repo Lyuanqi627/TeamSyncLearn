@@ -76,17 +76,22 @@
           </div>
         </div>
 
-        <div v-for="(msg, index) in messages" :key="index" class="message-wrapper">
-          <div class="message" :class="msg.role">
+        <div v-for="entry in messageSegments" :key="entry.msg.id" class="message-wrapper">
+          <div class="message" :class="[entry.msg.role, { 'has-chart': entry.hasChart }]">
             <div class="message-avatar">
-              <el-avatar v-if="msg.role === 'user'" :size="36" icon="UserFilled" />
+              <el-avatar v-if="entry.msg.role === 'user'" :size="36" icon="UserFilled" />
               <el-avatar v-else :size="36" style="background: #409eff">
                 <el-icon><MagicStick /></el-icon>
               </el-avatar>
             </div>
             <div class="message-content">
-              <div class="message-bubble" v-html="renderMessage(msg.content)"></div>
-              <div v-if="msg.loading" class="typing-indicator">
+              <div class="message-bubble">
+                <template v-for="(seg, i) in entry.segments" :key="`${i}-${seg.type}`">
+                  <span v-if="seg.type === 'text'" v-html="seg.html"></span>
+                  <ChatChart v-else :option="seg.option" />
+                </template>
+              </div>
+              <div v-if="entry.msg.loading" class="typing-indicator">
                 <span class="dot"></span>
                 <span class="dot"></span>
                 <span class="dot"></span>
@@ -124,11 +129,22 @@ import { sendChatMessageStream, getConversations, getMessages, deleteConversatio
 import { Delete, ChatDotSquare, MagicStick, Promotion, UserFilled, Plus, MoreFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import type { EChartsOption } from 'echarts'
+import ChatChart from '@/components/ChatChart.vue'
 
 interface ChatMessage {
+  id: string
   role: 'user' | 'assistant'
   content: string
   loading?: boolean
+}
+
+let idCounter = 0
+function genId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `msg-${Date.now()}-${idCounter++}`
 }
 
 interface Conversation {
@@ -155,6 +171,18 @@ const userStore = useUserStore()
 const uid = computed(() => userStore.userInfo?.userId ?? 'anonymous')
 const lastActiveKey = computed(() => `ai-chat:${uid.value}:active`)
 
+// 消息分段：识别 ```echarts 围栏 / 裸 JSON 图表 option，chart 段交给 ChatChart 渲染
+const messageSegments = computed(() =>
+  messages.value.map(m => {
+    const segments = parseMessage(m)
+    return {
+      msg: m,
+      segments,
+      hasChart: segments.some(s => s.type === 'chart')
+    }
+  })
+)
+
 const suggestions = [
   '帮我总结今天的学习重点',
   '如何制定有效的学习计划？',
@@ -170,7 +198,7 @@ function scrollToBottom() {
   })
 }
 
-function renderMessage(content: string): string {
+function renderText(content: string): string {
   // 1. 先转义 HTML，防止 XSS 和意外标签解析
   let html = content
     .replace(/&/g, '&amp;')
@@ -192,6 +220,88 @@ function renderMessage(content: string): string {
   return html
 }
 
+type Segment =
+  | { type: 'text'; html: string }
+  | { type: 'chart'; option: EChartsOption }
+
+// 按消息对象缓存分段结果：内容未变时返回同一引用，流式期间历史消息零重解析
+const segCache = new WeakMap<ChatMessage, { content: string; segments: Segment[] }>()
+// 按原始 JSON 字符串缓存解析后的 option：围栏闭合后继续流式追加文字时，option 引用不变，ChatChart 的 watch 不触发
+const optionCache = new Map<string, EChartsOption>()
+const OPTION_CACHE_MAX = 200
+
+function parseMessage(msg: ChatMessage): Segment[] {
+  const cached = segCache.get(msg)
+  if (cached && cached.content === msg.content) return cached.segments
+  const segments = doParse(msg.content)
+  segCache.set(msg, { content: msg.content, segments })
+  return segments
+}
+
+function cachedParse(raw: string): EChartsOption | null {
+  const hit = optionCache.get(raw)
+  if (hit) return hit
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const series = (parsed as any).series
+    if (!Array.isArray(series) || series.length === 0) return null
+    const option = parsed as EChartsOption
+    if (optionCache.size >= OPTION_CACHE_MAX) {
+      optionCache.delete(optionCache.keys().next().value!)
+    }
+    optionCache.set(raw, option)
+    return option
+  } catch {
+    return null
+  }
+}
+
+function doParse(content: string): Segment[] {
+  const segments: Segment[] = []
+  const pushText = (raw: string) => {
+    if (!raw) return
+    const last = segments[segments.length - 1]
+    if (last && last.type === 'text') {
+      last.html += renderText(raw) // 合并相邻 text 段
+    } else {
+      segments.push({ type: 'text', html: renderText(raw) })
+    }
+  }
+
+  // 1. 围栏优先：```echarts\n{json}\n```（流式未闭合时不匹配，整条按 text 展示）
+  const chartFence = /```echarts\s*\n?([\s\S]*?)```/g
+  let last = 0
+  let match: RegExpExecArray | null
+  let matchedAny = false
+  while ((match = chartFence.exec(content))) {
+    matchedAny = true
+    pushText(content.slice(last, match.index))
+    const option = cachedParse(match[1])
+    if (option) {
+      segments.push({ type: 'chart', option })
+    } else {
+      pushText(match[0]) // 解析失败按代码块文本展示
+    }
+    last = chartFence.lastIndex
+  }
+  pushText(content.slice(last))
+
+  // 2. 裸 JSON 兜底：无围栏且整条就是一个 echarts option（覆盖历史消息里存的裸 JSON）
+  if (!matchedAny && !segments.length) {
+    const trimmed = content.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const option = cachedParse(trimmed)
+      if (option) segments.push({ type: 'chart', option })
+    }
+  }
+
+  if (!segments.length) {
+    segments.push({ type: 'text', html: renderText(content) })
+  }
+  return segments
+}
+
 function formatTime(ts?: number): string {
   if (!ts) return ''
   const d = new Date(ts * 1000)
@@ -208,9 +318,9 @@ function formatTime(ts?: number): string {
 function mapMessages(data: any[]): ChatMessage[] {
   const result: ChatMessage[] = []
   for (const item of data) {
-    result.push({ role: 'user', content: item.query || '' })
+    result.push({ id: `${item.id}-user`, role: 'user', content: item.query || '' })
     if (item.answer) {
-      result.push({ role: 'assistant', content: item.answer })
+      result.push({ id: `${item.id}-assistant`, role: 'assistant', content: item.answer })
     }
   }
   return result
@@ -335,11 +445,12 @@ function sendMessage() {
   if (!text || sending.value) return
 
   inputText.value = ''
-  messages.value.push({ role: 'user', content: text })
+  messages.value.push({ id: genId(), role: 'user', content: text })
 
   // 添加加载中的占位
   const loadingIdx = messages.value.length
-  messages.value.push({ role: 'assistant', content: '', loading: true })
+  const loadingId = genId()
+  messages.value.push({ id: loadingId, role: 'assistant', content: '', loading: true })
   sending.value = true
   scrollToBottom()
 
@@ -377,6 +488,7 @@ function sendMessage() {
       if (event === 'error') {
         streamEnded = true
         messages.value[loadingIdx] = {
+          id: loadingId,
           role: 'assistant',
           content: '抱歉，AI 服务出错，请稍后再试。'
         }
@@ -388,6 +500,7 @@ function sendMessage() {
       if (streamEnded) return
       streamEnded = true
       messages.value[loadingIdx] = {
+        id: loadingId,
         role: 'assistant',
         content: '抱歉，网络异常，请检查连接后重试。'
       }
@@ -605,6 +718,11 @@ onMounted(() => {
   gap: 12px;
   max-width: 80%;
   width: fit-content;
+}
+
+/* 含图表的助手消息：宽度撑到上限，避免 chart 容器在 fit-content 下塌陷为 0 */
+.message.has-chart {
+  width: 100%;
 }
 
 .message.assistant {
