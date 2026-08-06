@@ -8,6 +8,17 @@
           <template #header>选择日程</template>
 
           <!-- date navigation calendar -->
+          <div class="calendar-toolbar">
+            <el-date-picker
+              v-model="jumpDate"
+              type="date"
+              placeholder="跳转到指定日期"
+              value-format="YYYY-MM-DD"
+              size="small"
+              :clearable="false"
+              @change="onJumpDate"
+            />
+          </div>
           <div class="calendar-wrapper">
             <el-calendar v-model="currentDate">
               <template #date-cell="{ data }">
@@ -247,6 +258,7 @@ const showImagePreview = ref(false)
 const previewImageUrl = ref('')
 const currentDate = ref(new Date())
 const selectedDate = ref<string | null>(null)
+const jumpDate = ref('')
 
 let blockKeyCounter = 0
 
@@ -325,6 +337,14 @@ function formatDateLabel(dateStr: string) {
 }
 
 function selectDate(dateStr: string) {
+  selectedDate.value = dateStr
+  jumpDate.value = dateStr
+}
+
+// 从日期选择器跳转到指定日期：日历切换到对应月份并选中，列表同步过滤
+function onJumpDate(dateStr: string | null) {
+  if (!dateStr) return
+  currentDate.value = new Date(dateStr)
   selectedDate.value = dateStr
 }
 
@@ -550,6 +570,11 @@ onMounted(fetchSchedules)
 :deep(.el-card__body) { padding-bottom: 8px; }
 
 /* compact calendar */
+.calendar-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
 .calendar-wrapper { margin-bottom: 12px; }
 .calendar-wrapper :deep(.el-calendar) { --el-calendar-cell-width: auto; }
 .calendar-wrapper :deep(.el-calendar-table) { table-layout: fixed; }

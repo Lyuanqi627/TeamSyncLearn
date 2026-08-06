@@ -9,6 +9,17 @@
 
     <!-- Calendar view -->
     <el-card shadow="hover" class="calendar-card">
+      <div class="calendar-toolbar">
+        <el-date-picker
+          v-model="jumpDate"
+          type="date"
+          placeholder="跳转到指定日期"
+          value-format="YYYY-MM-DD"
+          size="small"
+          :clearable="false"
+          @change="onJumpDate"
+        />
+      </div>
       <el-calendar v-model="currentDate">
         <template #date-cell="{ data }">
           <div class="calendar-cell" @click="selectDate(data.day)">
@@ -143,6 +154,7 @@ import { Plus, Download } from '@element-plus/icons-vue'
 import AiSummaryCard from '@/components/AiSummaryCard.vue'
 
 const currentDate = ref(new Date())
+const jumpDate = ref('')
 
 function formatDate(d: Date) {
   const y = d.getFullYear()
@@ -217,6 +229,13 @@ function dateStatus(dateStr: string) {
 
 function selectDate(dateStr: string) {
   currentDate.value = new Date(dateStr)
+  jumpDate.value = dateStr
+}
+
+// 从日期选择器跳转到指定日期
+function onJumpDate(dateStr: string | null) {
+  if (!dateStr) return
+  currentDate.value = new Date(dateStr)
 }
 
 function statusTag(status: number) {
@@ -286,6 +305,11 @@ onMounted(fetchAllSchedules)
 }
 .page-title { font-size: 20px; color: #303133; margin: 0; }
 .calendar-card { margin-bottom: 20px; }
+.calendar-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px 8px;
+}
 /* ===== 紧凑日历：限宽居中 + 缩小单元格/表头 ===== */
 .calendar-card :deep(.el-calendar) {
   --el-calendar-cell-width: auto;
