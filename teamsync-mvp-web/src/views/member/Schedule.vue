@@ -13,8 +13,8 @@
         <template #date-cell="{ data }">
           <div class="calendar-cell" @click="selectDate(data.day)">
             <span class="day-number">{{ data.day.split('-')[2] }}</span>
-            <div class="schedule-dot" v-if="hasScheduleOnDate(data.day)">
-              <span class="dot"></span>
+            <div class="schedule-dot" v-if="dateStatus(data.day)">
+              <span class="dot" :class="dateStatus(data.day)"></span>
             </div>
           </div>
         </template>
@@ -136,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getSchedules, createSchedule, updateSchedule, deleteSchedule } from '@/api/schedule'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download } from '@element-plus/icons-vue'
@@ -154,7 +154,11 @@ function formatDate(d: Date) {
 function formatDateLabel(d: Date) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
-const schedules = ref<any[]>([])
+// 全量日程（用于日历标色）；选中日期的列表由 computed 过滤得出
+const allSchedules = ref<any[]>([])
+const schedules = computed(() =>
+  allSchedules.value.filter(s => s.planDate === formatDate(currentDate.value))
+)
 const showDialog = ref(false)
 const showDetail = ref(false)
 const editingId = ref<number | null>(null)
@@ -191,17 +195,29 @@ const fileItems = computed(() => {
   return detailItem.value?.achievement?.items?.filter((i: any) => i.contentType === 'FILE') || []
 })
 
-function hasScheduleOnDate(dateStr: string) {
-  return schedules.value.some(s => s.planDate === dateStr)
+// 按 planDate 归组，计算每个日期的完成状态：全部完成→blue，存在未完成→orange
+const dateStatusMap = computed(() => {
+  const map = new Map<string, 'blue' | 'orange'>()
+  const byDate = new Map<string, any[]>()
+  for (const s of allSchedules.value) {
+    const d = s.planDate
+    if (!d) continue
+    if (!byDate.has(d)) byDate.set(d, [])
+    byDate.get(d)!.push(s)
+  }
+  for (const [d, items] of byDate) {
+    map.set(d, items.every(s => s.status === 2) ? 'blue' : 'orange')
+  }
+  return map
+})
+
+function dateStatus(dateStr: string) {
+  return dateStatusMap.value.get(dateStr) || null
 }
 
 function selectDate(dateStr: string) {
   currentDate.value = new Date(dateStr)
 }
-
-watch(currentDate, () => {
-  fetchSchedules()
-})
 
 function statusTag(status: number) {
   return ['info', 'warning', 'success'][status] as any
@@ -214,11 +230,10 @@ function resetForm() {
   editingId.value = null
 }
 
-async function fetchSchedules() {
-  const dateStr = formatDate(currentDate.value)
-  const res: any = await getSchedules({ date: dateStr })
+async function fetchAllSchedules() {
+  const res: any = await getSchedules()
   if (res.code === 200) {
-    schedules.value = res.data || []
+    allSchedules.value = res.data || []
   }
 }
 
@@ -239,7 +254,7 @@ async function handleSave() {
     }
     showDialog.value = false
     resetForm()
-    fetchSchedules()
+    fetchAllSchedules()
   } finally {
     saving.value = false
   }
@@ -254,11 +269,11 @@ function handleDelete(id: number) {
   ElMessageBox.confirm('确定删除此日程吗？', '提示').then(async () => {
     await deleteSchedule(id)
     ElMessage.success('删除成功')
-    fetchSchedules()
+    fetchAllSchedules()
   }).catch(() => {})
 }
 
-onMounted(fetchSchedules)
+onMounted(fetchAllSchedules)
 </script>
 
 <style scoped>
@@ -292,6 +307,7 @@ onMounted(fetchSchedules)
   background: #409eff;
   border-radius: 50%;
 }
+.dot.orange { background: #e6a23c; }
 .list-card { margin-bottom: 20px; }
 .empty-state { padding: 40px 0; }
 .schedule-item {

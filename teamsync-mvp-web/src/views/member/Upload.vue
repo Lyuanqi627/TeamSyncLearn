@@ -13,7 +13,7 @@
               <template #date-cell="{ data }">
                 <div class="calendar-cell" @click="selectDate(data.day)">
                   <span class="c-day">{{ data.day.split('-')[2] }}</span>
-                  <span class="c-dot" v-if="hasScheduleOnDate(data.day)"></span>
+                  <span class="c-dot" v-if="dateStatus(data.day)" :class="dateStatus(data.day)"></span>
                 </div>
               </template>
             </el-calendar>
@@ -299,8 +299,24 @@ const schedulesForDate = computed(() => {
   return schedules.value.filter(s => s.planDate === selectedDate.value)
 })
 
-function hasScheduleOnDate(dateStr: string) {
-  return schedules.value.some(s => s.planDate === dateStr)
+// 按 planDate 归组，计算每个日期的完成状态：全部完成→blue，存在未完成→orange
+const dateStatusMap = computed(() => {
+  const map = new Map<string, 'blue' | 'orange'>()
+  const byDate = new Map<string, any[]>()
+  for (const s of schedules.value) {
+    const d = s.planDate
+    if (!d) continue
+    if (!byDate.has(d)) byDate.set(d, [])
+    byDate.get(d)!.push(s)
+  }
+  for (const [d, items] of byDate) {
+    map.set(d, items.every(s => s.status === 2) ? 'blue' : 'orange')
+  }
+  return map
+})
+
+function dateStatus(dateStr: string) {
+  return dateStatusMap.value.get(dateStr) || null
 }
 
 function formatDateLabel(dateStr: string) {
@@ -557,6 +573,8 @@ onMounted(fetchSchedules)
   background: #409eff;
   border-radius: 50%;
 }
+.c-dot.blue { background: #409eff; }
+.c-dot.orange { background: #e6a23c; }
 .calendar-wrapper :deep(.is-selected .c-day) {
   color: #fff;
   background: #409eff;
