@@ -5,6 +5,7 @@ import com.teamsync.entity.SysSession;
 import com.teamsync.mapper.SysSessionMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -14,6 +15,9 @@ import java.util.Date;
 public class TokenInterceptor implements HandlerInterceptor {
 
     private final SysSessionMapper sessionMapper;
+
+    @Value("${ai-integration.api-key:}")
+    private String aiApiKey;
 
     public TokenInterceptor(SysSessionMapper sessionMapper) {
         this.sessionMapper = sessionMapper;
@@ -27,6 +31,15 @@ public class TokenInterceptor implements HandlerInterceptor {
             response.setContentType("application/json;charset=utf-8");
             response.getWriter().write("{\"code\":401,\"msg\":\"未登录或token已过期\",\"data\":null}");
             return false;
+        }
+
+        // AI Agent 集成：/api/ai/** 可用固定密钥访问，不绑定用户会话。
+        // 用户身份由接口的显式 userId 参数提供，不设置 UserContext。
+        String uri = request.getRequestURI();
+        if (aiApiKey != null && !aiApiKey.isEmpty()
+                && uri.startsWith("/api/ai/")
+                && aiApiKey.equals(token)) {
+            return true;
         }
 
         SysSession session = sessionMapper.selectById(token);

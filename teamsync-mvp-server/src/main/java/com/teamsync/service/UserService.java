@@ -72,6 +72,18 @@ public class UserService {
         return userMapper.selectById(UserContext.getUserId());
     }
 
+    public Map<String, Object> getCurrentUserId() {
+        SysUser user = userMapper.selectById(UserContext.getUserId());
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("userId", user.getId());
+        result.put("username", user.getUsername());
+        result.put("role", user.getRole());
+        return result;
+    }
+
     public SysUser getUserById(Long id) {
         return userMapper.selectById(id);
     }

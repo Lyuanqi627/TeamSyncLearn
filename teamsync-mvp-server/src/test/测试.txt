@@ -1,0 +1,12 @@
+Token_627：
+    {
+    "code": 200,
+    "msg": "success",
+    "data": {
+        "role": "MEMBER",
+        "avatar": "",
+        "userId": 2,
+        "token": "4298725c1266486dadc05e715661349d",
+        "username": "627"
+    }
+}

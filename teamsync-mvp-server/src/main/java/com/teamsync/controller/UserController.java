@@ -37,4 +37,9 @@ public class UserController {
     public Result<?> info() {
         return Result.success(userService.getCurrentUser());
     }
+
+    @GetMapping("/me")
+    public Result<Map<String, Object>> me() {
+        return Result.success(userService.getCurrentUserId());
+    }
 }

@@ -36,6 +36,10 @@ dify:
   api-base-url: http://localhost/v1
   api-key: ${DIFY_API_KEY:app-YajsjGmOTpPFhOH8Xb41lTIx}
 
+# AI Agent（Dify 等）调用后端 /api/ai/** 接口的专用密钥，不绑定用户会话、不过期
+ai-integration:
+  api-key: ${AI_INTEGRATION_API_KEY:teamsync-ai-key-2026}
+
 # Token expiry in hours
 token:
   expiry: 72

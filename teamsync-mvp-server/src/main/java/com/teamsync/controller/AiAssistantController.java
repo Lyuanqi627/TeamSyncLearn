@@ -4,6 +4,8 @@ import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teamsync.common.Result;
 import com.teamsync.common.UserContext;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +27,16 @@ public class AiAssistantController {
 
     @Value("${dify.api-key}")
     private String difyApiKey;
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 将 Dify 返回的 JSON 字符串解析为 Jackson 兼容的 Map。
+     * 不能用 hutool 的 JSONObject 直接放进 Result 返回，否则 Jackson 无法序列化 JSONNull。
+     */
+    private Object parseDifyJson(String body) throws IOException {
+        return objectMapper.readValue(body, new TypeReference<java.util.Map<String, Object>>() {});
+    }
 
     /**
      * 发送消息到 Dify AI Agent（流式 SSE 模式）
@@ -133,30 +145,116 @@ public class AiAssistantController {
     }
 
     /**
-     * 查询会话历史
+     * 查询会话历史（支持 last_id / limit 分页，Dify 按最近活跃排序）
      */
     @GetMapping("/conversations")
-    public Result<?> getConversations() {
+    public Result<?> getConversations(
+            @RequestParam(required = false) String last_id,
+            @RequestParam(defaultValue = "20") int limit) {
         Long userId = UserContext.getUserId();
         if (userId == null) {
             return Result.error(401, "用户未登录");
         }
 
-        try (HttpResponse httpResponse = HttpRequest.get(difyBaseUrl + "/conversations")
+        HttpRequest req = HttpRequest.get(difyBaseUrl + "/conversations")
                 .header("Authorization", "Bearer " + difyApiKey)
                 .form("user", userId.toString())
-                .form("limit", 20)
-                .timeout(10000)
-                .execute()) {
+                .form("limit", limit);
+        if (last_id != null && !last_id.isBlank()) {
+            req.form("last_id", last_id);
+        }
+
+        try (HttpResponse httpResponse = req.timeout(10000).execute()) {
 
             if (!httpResponse.isOk()) {
                 return Result.error("获取会话列表失败: " + httpResponse.getStatus());
             }
 
-            JSONObject result = JSONUtil.parseObj(httpResponse.body());
-            return Result.success(result);
+            return Result.success(parseDifyJson(httpResponse.body()));
         } catch (Exception e) {
             return Result.error("获取会话列表异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 查询会话内消息历史（Dify 返回倒序，最新在前，前端负责反转展示）
+     *
+     * @param conversation_id 会话ID
+     * @param first_id        当前已加载最旧一条消息的 id，用于向前翻页加载更早的消息
+     * @param limit           每页条数
+     */
+    @GetMapping("/messages")
+    public Result<?> getMessages(
+            @RequestParam String conversation_id,
+            @RequestParam(required = false) String first_id,
+            @RequestParam(defaultValue = "20") int limit) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.error(401, "用户未登录");
+        }
+
+        HttpRequest req = HttpRequest.get(difyBaseUrl + "/messages")
+                .header("Authorization", "Bearer " + difyApiKey)
+                .form("user", userId.toString())
+                .form("conversation_id", conversation_id)
+                .form("limit", limit);
+        if (first_id != null && !first_id.isBlank()) {
+            req.form("first_id", first_id);
+        }
+
+        try (HttpResponse httpResponse = req.timeout(10000).execute()) {
+
+            if (!httpResponse.isOk()) {
+                return Result.error("获取消息失败: " + httpResponse.getStatus());
+            }
+
+            return Result.success(parseDifyJson(httpResponse.body()));
+        } catch (Exception e) {
+            return Result.error("获取消息异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 重命名会话（auto_generate=true 时由 Dify 根据首条消息自动命名）
+     */
+    @PostMapping("/conversations/rename")
+    public Result<?> renameConversation(@RequestBody java.util.Map<String, String> request) {
+        String conversationId = request.get("conversation_id");
+        if (conversationId == null || conversationId.isBlank()) {
+            return Result.error("会话ID不能为空");
+        }
+
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.error(401, "用户未登录");
+        }
+
+        boolean autoGenerate = Boolean.parseBoolean(request.getOrDefault("auto_generate", "false"));
+        JSONObject body = JSONUtil.createObj()
+                .set("auto_generate", autoGenerate)
+                .set("user", userId.toString());
+        if (!autoGenerate) {
+            String name = request.get("name");
+            if (name == null || name.isBlank()) {
+                return Result.error("会话名称不能为空");
+            }
+            body.set("name", name);
+        }
+
+        try (HttpResponse httpResponse = HttpRequest.post(difyBaseUrl + "/conversations/" + conversationId + "/name")
+                .header("Authorization", "Bearer " + difyApiKey)
+                .contentType("application/json")
+                .body(body.toString())
+                .timeout(10000)
+                .execute()) {
+
+            if (!httpResponse.isOk()) {
+                return Result.error("重命名会话失败: " + httpResponse.getStatus());
+            }
+
+            return Result.success(parseDifyJson(httpResponse.body()));
+        } catch (Exception e) {
+            return Result.error("重命名会话异常: " + e.getMessage());
         }
     }
 
@@ -167,8 +265,18 @@ public class AiAssistantController {
             return Result.error("会话ID不能为空");
         }
 
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.error(401, "用户未登录");
+        }
+
+        // Dify 删除会话要求 user 放在 JSON body 中
+        JSONObject body = JSONUtil.createObj().set("user", userId.toString());
+
         try (HttpResponse httpResponse = HttpRequest.delete(difyBaseUrl + "/conversations/" + conversationId)
                 .header("Authorization", "Bearer " + difyApiKey)
+                .contentType("application/json")
+                .body(body.toString())
                 .timeout(10000)
                 .execute()) {
 

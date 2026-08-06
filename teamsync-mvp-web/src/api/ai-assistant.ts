@@ -1,12 +1,23 @@
 import request from './request'
 
-export function getConversations() {
-  return request.get('/api/ai-assistant/conversations')
+export function getConversations(params?: { last_id?: string; limit?: number }) {
+  return request.get('/api/ai-assistant/conversations', { params })
+}
+
+export function getMessages(params: { conversation_id: string; first_id?: string; limit?: number }) {
+  return request.get('/api/ai-assistant/messages', { params })
 }
 
 export function deleteConversation(conversationId: string) {
   return request.post('/api/ai-assistant/conversations/delete', {
     conversation_id: conversationId
+  })
+}
+
+export function renameConversation(conversationId: string, name: string) {
+  return request.post('/api/ai-assistant/conversations/rename', {
+    conversation_id: conversationId,
+    name
   })
 }
 
