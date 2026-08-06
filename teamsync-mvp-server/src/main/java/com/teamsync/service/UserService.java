@@ -4,6 +4,7 @@ import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.IdUtil;
 import com.teamsync.common.UserContext;
 import com.teamsync.dto.LoginDTO;
+import com.teamsync.dto.UpdateProfileDTO;
 import com.teamsync.entity.SysSession;
 import com.teamsync.entity.SysUser;
 import com.teamsync.mapper.SysSessionMapper;
@@ -86,5 +87,19 @@ public class UserService {
 
     public SysUser getUserById(Long id) {
         return userMapper.selectById(id);
+    }
+
+    public SysUser updateProfile(Long userId, UpdateProfileDTO dto) {
+        SysUser patch = new SysUser();
+        patch.setId(userId);
+        // MyBatis-Plus 默认 update 策略为 NOT_NULL:null 字段不会进入 SET 子句(即不改动)
+        if (dto.getAvatar() != null) patch.setAvatar(dto.getAvatar());
+        if (dto.getNickname() != null) patch.setNickname(dto.getNickname());
+        if (dto.getBio() != null) patch.setBio(dto.getBio());
+        if (dto.getGender() != null) patch.setGender(dto.getGender());
+        if (dto.getAge() != null) patch.setAge(dto.getAge());
+        if (dto.getAddress() != null) patch.setAddress(dto.getAddress());
+        userMapper.updateById(patch);
+        return userMapper.selectById(userId);
     }
 }

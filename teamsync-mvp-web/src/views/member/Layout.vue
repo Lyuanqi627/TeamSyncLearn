@@ -20,15 +20,11 @@
           </el-button>
           <el-divider direction="vertical" />
         </template>
-        <el-dropdown @command="handleCommand">
-          <span class="user-info">
-            <el-avatar :size="32" :icon="UserFilled" />
-            <span class="username">{{ userStore.username }}</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-          </template>
-        </el-dropdown>
+        <!-- 点击头像/用户名进入「我的」页面 -->
+        <div class="user-info" @click="router.push('/profile')">
+          <el-avatar :size="32" :src="userStore.avatarUrl" :icon="UserFilled" />
+          <span class="username">{{ userStore.displayName }}</span>
+        </div>
       </div>
     </header>
 
@@ -76,21 +72,11 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { ElMessageBox } from 'element-plus'
 import { DataBoard, Calendar, Upload, Document, MagicStick, Setting, UserFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
-
-function handleCommand(cmd: string) {
-  if (cmd === 'logout') {
-    ElMessageBox.confirm('确定退出登录吗？', '提示').then(() => {
-      userStore.logout()
-      router.push('/login')
-    }).catch(() => {})
-  }
-}
 </script>
 
 <style scoped>

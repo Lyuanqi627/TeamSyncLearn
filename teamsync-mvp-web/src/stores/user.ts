@@ -9,6 +9,13 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userInfo.value?.role === 'ADMIN')
   const username = computed(() => userInfo.value?.username || '')
+  const displayName = computed(() => userInfo.value?.nickname || userInfo.value?.username || '')
+  const avatarUrl = computed(() => {
+    const a = userInfo.value?.avatar
+    if (!a) return ''
+    if (a.startsWith('http') || a.startsWith('/uploads/')) return a
+    return '/uploads/' + a
+  })
 
   async function login(credentials: { username: string; password?: string }) {
     const res: any = await loginApi(credentials)
@@ -36,9 +43,21 @@ export const useUserStore = defineStore('user', () => {
   async function fetchUserInfo() {
     const res: any = await getUserInfo()
     if (res.code === 200) {
-      userInfo.value = res.data
+      // /api/user/info 返回的是 SysUser 实体(id 字段),统一规范为 userId,并持久化到 localStorage
+      userInfo.value = {
+        userId: res.data.id ?? res.data.userId,
+        username: res.data.username,
+        role: res.data.role,
+        avatar: res.data.avatar,
+        nickname: res.data.nickname,
+        bio: res.data.bio,
+        gender: res.data.gender,
+        age: res.data.age,
+        address: res.data.address
+      }
+      localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
     }
   }
 
-  return { token, userInfo, isLoggedIn, isAdmin, username, login, logout, fetchUserInfo }
+  return { token, userInfo, isLoggedIn, isAdmin, username, displayName, avatarUrl, login, logout, fetchUserInfo }
 })

@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS sys_user (
     password VARCHAR(100) DEFAULT '',
     avatar VARCHAR(500) DEFAULT '',
     role VARCHAR(20) DEFAULT 'MEMBER',
+    nickname VARCHAR(50) DEFAULT '',
+    bio VARCHAR(500) DEFAULT '',
+    gender VARCHAR(10) DEFAULT '',
+    age INT DEFAULT NULL,
+    address VARCHAR(200) DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

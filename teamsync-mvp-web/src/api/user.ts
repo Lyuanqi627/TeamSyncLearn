@@ -11,3 +11,7 @@ export function register(data: { username: string; password?: string }) {
 export function getUserInfo() {
   return request.get('/api/user/info')
 }
+
+export function updateProfile(data: any) {
+  return request.put('/api/user/profile', data)
+}

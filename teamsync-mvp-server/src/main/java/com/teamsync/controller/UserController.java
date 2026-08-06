@@ -1,7 +1,9 @@
 package com.teamsync.controller;
 
 import com.teamsync.common.Result;
+import com.teamsync.common.UserContext;
 import com.teamsync.dto.LoginDTO;
+import com.teamsync.dto.UpdateProfileDTO;
 import com.teamsync.service.UserService;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,5 +43,10 @@ public class UserController {
     @GetMapping("/me")
     public Result<Map<String, Object>> me() {
         return Result.success(userService.getCurrentUserId());
+    }
+
+    @PutMapping("/profile")
+    public Result<?> updateProfile(@RequestBody UpdateProfileDTO dto) {
+        return Result.success(userService.updateProfile(UserContext.getUserId(), dto));
     }
 }
