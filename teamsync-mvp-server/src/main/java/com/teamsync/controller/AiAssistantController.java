@@ -15,8 +15,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ai-assistant")
@@ -29,6 +33,35 @@ public class AiAssistantController {
     private String difyApiKey;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 单文件缓存上限（10MB），防止异常的大文件撑爆内存。
+     */
+    private static final int MAX_CACHE_FILE_SIZE = 10 * 1024 * 1024;
+
+    /**
+     * Dify 文件代理缓存：key 为 /files/ 路径（去掉签名查询串），value 为文件字节与 Content-Type。
+     * Dify 的 files[].url 是带签名临时链接，默认 5 分钟过期；历史消息（GET /messages）返回的是
+     * 过期快照且不会重新签名。首次实时拉取时把字节缓存下来，之后即使签名过期也能直接返回缓存，
+     * 保证刷新页面后历史图片仍能显示。accessOrder=true 实现 LRU，最多保留 100 条。
+     */
+    private final Map<String, FileCacheEntry> fileCache =
+            Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, FileCacheEntry> eldest) {
+                    return size() > 100;
+                }
+            });
+
+    private static final class FileCacheEntry {
+        final byte[] data;
+        final String contentType;
+
+        FileCacheEntry(byte[] data, String contentType) {
+            this.data = data;
+            this.contentType = contentType;
+        }
+    }
 
     /**
      * 将 Dify 返回的 JSON 字符串解析为 Jackson 兼容的 Map。
@@ -287,5 +320,125 @@ public class AiAssistantController {
         } catch (Exception e) {
             return Result.error("删除会话异常: " + e.getMessage());
         }
+    }
+
+    /**
+     * 代理 Dify 返回的文件（如思维导图 PNG）。Dify 的 files[].url 是相对路径
+     * （如 /files/tools/xxx.png），浏览器无法直接访问，统一经此接口转发。
+     * 该接口在 TokenInterceptor 的排除列表中（<img> 无法携带 Authorization 头），
+     * 安全性由 resolveDifyFileUrl 的严格白名单保证，只允许访问 Dify 自身的 /files/ 公开文件。
+     */
+    @GetMapping("/file")
+    public void proxyFile(@RequestParam String url, HttpServletResponse response) throws IOException {
+        String target = resolveDifyFileUrl(url);
+        if (target == null) {
+            response.setStatus(400);
+            return;
+        }
+
+        // 缓存命中：直接返回缓存的字节，不再请求 Dify。
+        // 这样历史消息里已经过期的签名 URL（刷新页面后）也能正常显示图片。
+        String cacheKey = fileCacheKey(url);
+        if (cacheKey != null) {
+            FileCacheEntry cached = fileCache.get(cacheKey);
+            if (cached != null) {
+                response.setContentType(cached.contentType);
+                response.setHeader("Cache-Control", "public, max-age=3600");
+                try (OutputStream out = response.getOutputStream()) {
+                    out.write(cached.data);
+                }
+                return;
+            }
+        }
+
+        try (HttpResponse upstream = HttpRequest.get(target).timeout(15000).execute()) {
+            if (!upstream.isOk()) {
+                response.setStatus(upstream.getStatus());
+                return;
+            }
+
+            String contentType = upstream.header("Content-Type");
+            if (contentType == null || contentType.isBlank()) {
+                contentType = "application/octet-stream";
+            }
+            response.setContentType(contentType);
+            response.setHeader("Cache-Control", "public, max-age=3600");
+
+            byte[] bytes = upstream.bodyBytes();
+            if (cacheKey != null && bytes.length <= MAX_CACHE_FILE_SIZE) {
+                fileCache.put(cacheKey, new FileCacheEntry(bytes, contentType));
+            }
+            try (OutputStream out = response.getOutputStream()) {
+                out.write(bytes);
+            }
+        }
+    }
+
+    /**
+     * 从文件 URL 提取缓存键：去掉签名查询串后的 /files/ 路径，非 /files/ 路径返回 null 不缓存。
+     * 同一文件的签名 URL 每次都可能不同（timestamp/nonce/sign 不同），但路径部分是稳定的，
+     * 用它作为键即可让过期的 URL 命中首次拉取时缓存的字节。
+     */
+    private String fileCacheKey(String url) {
+        int queryIdx = url.indexOf('?');
+        String path = queryIdx >= 0 ? url.substring(0, queryIdx) : url;
+        if (!path.startsWith("/files/")) {
+            return null;
+        }
+        return path;
+    }
+
+    /**
+     * 校验并解析 Dify 文件 URL -> 可请求的完整地址，非法输入返回 null。
+     * 只放行 Dify 自身 /files/ 下的文件路径（相对）或与 Dify origin 同 host 的 URL，防止 SSRF。
+     */
+    private String resolveDifyFileUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        url = url.trim();
+
+        if (url.startsWith("/")) {
+            // 相对路径：只允许 Dify 文件路径，且不能含路径穿越。
+            // Dify 的 files 是带签名查询串的 URL（?timestamp=&nonce=&sign=），只校验路径部分，完整 URL 原样代理。
+            if (!url.startsWith("/files/") || url.contains("..")) {
+                return null;
+            }
+            String path = url;
+            int queryIdx = url.indexOf('?');
+            if (queryIdx >= 0) {
+                path = url.substring(0, queryIdx);
+            }
+            if (!path.matches("^/files/[\\w./-]+$")) {
+                return null;
+            }
+            return difyOrigin() + url;
+        }
+
+        // 绝对 URL：仅允许与 Dify origin 同 host
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            try {
+                String originHost = new URI(difyOrigin()).getHost();
+                String urlHost = new URI(url).getHost();
+                if (originHost != null && originHost.equalsIgnoreCase(urlHost)) {
+                    return url;
+                }
+            } catch (Exception ignored) {
+            }
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Dify 文件服务 origin：从 api-base-url（如 http://localhost/v1）去掉末尾 /v1。
+     */
+    private String difyOrigin() {
+        String base = difyBaseUrl;
+        if (base != null && base.endsWith("/v1")) {
+            return base.substring(0, base.length() - 3);
+        }
+        return base == null ? "" : base;
     }
 }

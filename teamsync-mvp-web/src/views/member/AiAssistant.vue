@@ -88,7 +88,21 @@
               <div class="message-bubble">
                 <template v-for="(seg, i) in entry.segments" :key="`${i}-${seg.type}`">
                   <span v-if="seg.type === 'text'" v-html="seg.html"></span>
-                  <ChatChart v-else :option="seg.option" />
+                  <ChatChart v-else-if="seg.type === 'chart'" :option="seg.option" />
+                  <div v-else-if="seg.type === 'image'" class="chat-image-wrap">
+                    <el-image
+                      :src="seg.url"
+                      :preview-src-list="[seg.url]"
+                      fit="contain"
+                      preview-teleported
+                      class="chat-image"
+                    />
+                    <div class="chat-image-actions">
+                      <el-button size="small" circle type="primary" plain @click.stop="downloadImage(seg.url)" title="保存图片">
+                        <el-icon><Download /></el-icon>
+                      </el-button>
+                    </div>
+                  </div>
                 </template>
               </div>
               <div v-if="entry.msg.loading" class="typing-indicator">
@@ -126,7 +140,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed } from 'vue'
 import { sendChatMessageStream, getConversations, getMessages, deleteConversation, renameConversation } from '@/api/ai-assistant'
-import { Delete, ChatDotSquare, MagicStick, Promotion, UserFilled, Plus, MoreFilled } from '@element-plus/icons-vue'
+import { Delete, ChatDotSquare, MagicStick, Promotion, UserFilled, Plus, MoreFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import type { EChartsOption } from 'echarts'
@@ -137,6 +151,15 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   loading?: boolean
+  files?: DifyFile[]
+}
+
+interface DifyFile {
+  id?: string
+  type?: string
+  url?: string
+  remote_url?: string
+  belongs_to?: string
 }
 
 let idCounter = 0
@@ -198,6 +221,42 @@ function scrollToBottom() {
   })
 }
 
+// 将 Dify 返回的文件 URL（相对或绝对）转为后端代理地址，供 <img> 直接加载
+function difyFileProxyUrl(url: string): string {
+  return `/api/ai-assistant/file?url=${encodeURIComponent(url)}`
+}
+
+// 从图片 URL 提取文件名（去掉签名查询串），用于保存图片时的默认文件名
+function imageFileName(url: string): string {
+  try {
+    const base = new URL(url, window.location.origin).pathname.split('/').filter(Boolean).pop()
+    return base || '思维导图.png'
+  } catch {
+    return '思维导图.png'
+  }
+}
+
+// 图片去重键：取 URL 路径部分（如 /files/tools/xxx.png），忽略签名查询串。
+// 同一文件的签名 URL 每次 timestamp/nonce/sign 都不同，但路径是稳定的，用路径才能正确去重。
+function fileImgId(url: string): string {
+  try {
+    return new URL(url, window.location.origin).pathname
+  } catch {
+    return url
+  }
+}
+
+// 保存图片到本地：图片经后端代理返回，属同源，<a download> 可直接触发下载
+function downloadImage(url: string) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = imageFileName(url)
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  ElMessage.success('图片已保存')
+}
+
 function renderText(content: string): string {
   // 1. 先转义 HTML，防止 XSS 和意外标签解析
   let html = content
@@ -223,18 +282,20 @@ function renderText(content: string): string {
 type Segment =
   | { type: 'text'; html: string }
   | { type: 'chart'; option: EChartsOption }
+  | { type: 'image'; url: string; alt?: string }
 
-// 按消息对象缓存分段结果：内容未变时返回同一引用，流式期间历史消息零重解析
-const segCache = new WeakMap<ChatMessage, { content: string; segments: Segment[] }>()
+// 按消息对象缓存分段结果：内容与 files 未变时返回同一引用，流式期间历史消息零重解析
+const segCache = new WeakMap<ChatMessage, { content: string; filesKey: string; segments: Segment[] }>()
 // 按原始 JSON 字符串缓存解析后的 option：围栏闭合后继续流式追加文字时，option 引用不变，ChatChart 的 watch 不触发
 const optionCache = new Map<string, EChartsOption>()
 const OPTION_CACHE_MAX = 200
 
 function parseMessage(msg: ChatMessage): Segment[] {
   const cached = segCache.get(msg)
-  if (cached && cached.content === msg.content) return cached.segments
-  const segments = doParse(msg.content)
-  segCache.set(msg, { content: msg.content, segments })
+  const filesKey = (msg.files || []).map(f => f.url || f.id || '').join('|')
+  if (cached && cached.content === msg.content && cached.filesKey === filesKey) return cached.segments
+  const segments = doParse(msg.content, msg.files || [])
+  segCache.set(msg, { content: msg.content, filesKey, segments })
   return segments
 }
 
@@ -257,7 +318,30 @@ function cachedParse(raw: string): EChartsOption | null {
   }
 }
 
-function doParse(content: string): Segment[] {
+function doParse(content: string, files: DifyFile[]): Segment[] {
+  // 0. 图片段。优先用 answer 文本里的 markdown 图片：Dify 会为 answer 里的文件 URL 重新签名，
+  //    历史消息里最新鲜（files 数组里的是过期快照）。files 数组兜底；按路径去重，避免同一图双份。
+  const seenImgIds = new Set<string>()
+  const imageSegments: Segment[] = []
+  content = content.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, url: string) => {
+    const id = fileImgId(url)
+    if (!seenImgIds.has(id)) {
+      seenImgIds.add(id)
+      imageSegments.push({ type: 'image', url: difyFileProxyUrl(url), alt: alt || undefined })
+    }
+    return ''
+  })
+  for (const f of files || []) {
+    const fileUrl = f?.url || f?.remote_url
+    if (!fileUrl) continue
+    const isImage = f?.type === 'image' || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(fileUrl)
+    if (!isImage) continue
+    const id = fileImgId(fileUrl)
+    if (seenImgIds.has(id)) continue
+    seenImgIds.add(id)
+    imageSegments.push({ type: 'image', url: difyFileProxyUrl(fileUrl) })
+  }
+
   const segments: Segment[] = []
   const pushText = (raw: string) => {
     if (!raw) return
@@ -299,7 +383,9 @@ function doParse(content: string): Segment[] {
   if (!segments.length) {
     segments.push({ type: 'text', html: renderText(content) })
   }
-  return segments
+
+  // 3. 图片段追加在文本/图表之后
+  return [...segments, ...imageSegments]
 }
 
 function formatTime(ts?: number): string {
@@ -320,7 +406,13 @@ function mapMessages(data: any[]): ChatMessage[] {
   for (const item of data) {
     result.push({ id: `${item.id}-user`, role: 'user', content: item.query || '' })
     if (item.answer) {
-      result.push({ id: `${item.id}-assistant`, role: 'assistant', content: item.answer })
+      // Dify /messages 返回的文件字段可能是 files 或 message_files（不同版本不一致），兼容取其一
+      const files = Array.isArray(item.files)
+        ? item.files
+        : Array.isArray(item.message_files)
+          ? item.message_files
+          : undefined
+      result.push({ id: `${item.id}-assistant`, role: 'assistant', content: item.answer, files })
     }
   }
   return result
@@ -466,6 +558,11 @@ function sendMessage() {
       if (answer) {
         messages.value[loadingIdx].content += answer
         messages.value[loadingIdx].loading = false
+      }
+
+      // 捕获工具返回的文件（图片等），message_end 事件携带完整 files
+      if (data.files?.length) {
+        messages.value[loadingIdx].files = data.files
       }
 
       // 保存会话 ID（新会话首次回复时产生）
@@ -785,6 +882,37 @@ onMounted(() => {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
+}
+
+/* AI 返回的图片（如思维导图 PNG）缩略图：固定尺寸框内等比展示，点击 el-image 全屏查看原图 */
+.chat-image-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.chat-image {
+  display: block;
+  width: 380px;
+  max-width: 100%;
+  height: 280px;
+  margin: 8px 0;
+  border-radius: 6px;
+  cursor: zoom-in;
+  background: #f0f2f5;
+}
+
+.chat-image-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.chat-image-wrap:hover .chat-image-actions,
+.chat-image-wrap:focus-within .chat-image-actions {
+  opacity: 1;
 }
 
 /* ===== Typing Indicator ===== */
