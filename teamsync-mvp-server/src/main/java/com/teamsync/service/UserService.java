@@ -1,33 +1,31 @@
 package com.teamsync.service;
 
-import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.IdUtil;
 import com.teamsync.common.UserContext;
 import com.teamsync.dto.LoginDTO;
 import com.teamsync.dto.UpdateProfileDTO;
-import com.teamsync.entity.SysSession;
 import com.teamsync.entity.SysUser;
-import com.teamsync.mapper.SysSessionMapper;
 import com.teamsync.mapper.SysUserMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class UserService {
 
     private final SysUserMapper userMapper;
-    private final SysSessionMapper sessionMapper;
+    private final StringRedisTemplate redisTemplate;
 
     @Value("${token.expiry:72}")
     private int tokenExpiry;
 
-    public UserService(SysUserMapper userMapper, SysSessionMapper sessionMapper) {
+    public UserService(SysUserMapper userMapper, StringRedisTemplate redisTemplate) {
         this.userMapper = userMapper;
-        this.sessionMapper = sessionMapper;
+        this.redisTemplate = redisTemplate;
     }
 
     public Map<String, Object> login(LoginDTO dto) {
@@ -48,13 +46,9 @@ public class UserService {
             throw new IllegalArgumentException("密码错误");
         }
 
-        // Create session
+        // Create session in Redis: key=token, value=userId, TTL=tokenExpiry hours
         String token = IdUtil.fastSimpleUUID();
-        SysSession session = new SysSession();
-        session.setToken(token);
-        session.setUserId(user.getId());
-        session.setExpireAt(DateUtil.offsetHour(new Date(), tokenExpiry));
-        sessionMapper.insert(session);
+        redisTemplate.opsForValue().set(token, String.valueOf(user.getId()), tokenExpiry, TimeUnit.HOURS);
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
@@ -65,8 +59,10 @@ public class UserService {
         return result;
     }
 
-    public void logout() {
-        // clear session will be handled by token expiry
+    public void logout(String token) {
+        if (token != null && !token.isEmpty()) {
+            redisTemplate.delete(token);
+        }
     }
 
     public SysUser getCurrentUser() {

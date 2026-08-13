@@ -1,40 +1,40 @@
 package com.teamsync.common;
 
-import cn.hutool.core.date.DateUtil;
-import com.teamsync.entity.SysSession;
-import com.teamsync.mapper.SysSessionMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import java.util.Date;
+import java.io.IOException;
 
 @Component
 public class TokenInterceptor implements HandlerInterceptor {
 
-    private final SysSessionMapper sessionMapper;
+    private static final Logger log = LoggerFactory.getLogger(TokenInterceptor.class);
+
+    private final StringRedisTemplate redisTemplate;
 
     @Value("${ai-integration.api-key:}")
     private String aiApiKey;
 
-    public TokenInterceptor(SysSessionMapper sessionMapper) {
-        this.sessionMapper = sessionMapper;
+    public TokenInterceptor(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String token = request.getHeader("Authorization");
         if (token == null || token.isEmpty()) {
-            response.setStatus(401);
-            response.setContentType("application/json;charset=utf-8");
-            response.getWriter().write("{\"code\":401,\"msg\":\"未登录或token已过期\",\"data\":null}");
-            return false;
+            return reject(response, "未登录或token已过期");
         }
 
         // AI Agent 集成：/api/ai/** 可用固定密钥访问，不绑定用户会话。
         // 用户身份由接口的显式 userId 参数提供，不设置 UserContext。
+        // 必须在 Redis 查询之前判断——否则 AI 密钥会被当作会话 token 查 Redis 而误判 401。
         String uri = request.getRequestURI();
         if (aiApiKey != null && !aiApiKey.isEmpty()
                 && uri.startsWith("/api/ai/")
@@ -42,19 +42,31 @@ public class TokenInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        SysSession session = sessionMapper.selectById(token);
-        if (session == null || session.getExpireAt().before(new Date())) {
-            if (session != null) {
-                sessionMapper.deleteById(token);
-            }
-            response.setStatus(401);
-            response.setContentType("application/json;charset=utf-8");
-            response.getWriter().write("{\"code\":401,\"msg\":\"token已过期，请重新登录\",\"data\":null}");
-            return false;
+        // Session 存 Redis：key=token, value=userId, 过期由 TTL 兜底
+        String userIdStr;
+        try {
+            userIdStr = redisTemplate.opsForValue().get(token);
+        } catch (Exception e) {
+            log.error("Redis 会话查询失败: {}", e.getMessage(), e);
+            return reject(response, "会话服务暂不可用，请稍后重试");
         }
-
-        UserContext.setUserId(session.getUserId());
+        if (userIdStr == null) {
+            return reject(response, "token已过期，请重新登录");
+        }
+        try {
+            UserContext.setUserId(Long.parseLong(userIdStr));
+        } catch (NumberFormatException e) {
+            log.warn("会话值非法, token={}", token);
+            return reject(response, "会话无效，请重新登录");
+        }
         return true;
+    }
+
+    private boolean reject(HttpServletResponse response, String msg) throws IOException {
+        response.setStatus(401);
+        response.setContentType("application/json;charset=utf-8");
+        response.getWriter().write("{\"code\":401,\"msg\":\"" + msg + "\",\"data\":null}");
+        return false;
     }
 
     @Override

@@ -15,3 +15,7 @@ export function getUserInfo() {
 export function updateProfile(data: any) {
   return request.put('/api/user/profile', data)
 }
+
+export function logout() {
+  return request.post('/api/user/logout')
+}

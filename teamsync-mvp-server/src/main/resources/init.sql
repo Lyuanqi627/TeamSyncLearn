@@ -20,14 +20,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Session table
-CREATE TABLE IF NOT EXISTS sys_session (
-    token VARCHAR(64) PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    expire_at DATETIME NOT NULL
-);
-
--- 3. Schedule table
+-- 2. Schedule table
 CREATE TABLE IF NOT EXISTS schedule (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,

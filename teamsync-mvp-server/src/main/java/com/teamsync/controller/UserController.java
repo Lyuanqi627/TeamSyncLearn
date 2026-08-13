@@ -5,6 +5,7 @@ import com.teamsync.common.UserContext;
 import com.teamsync.dto.LoginDTO;
 import com.teamsync.dto.UpdateProfileDTO;
 import com.teamsync.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -30,8 +31,8 @@ public class UserController {
     }
 
     @PostMapping("/logout")
-    public Result<?> logout() {
-        userService.logout();
+    public Result<?> logout(HttpServletRequest request) {
+        userService.logout(request.getHeader("Authorization"));
         return Result.success();
     }
 

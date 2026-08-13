@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { login as loginApi, getUserInfo } from '@/api/user'
+import { login as loginApi, getUserInfo, logout as logoutApi } from '@/api/user'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
@@ -33,7 +33,12 @@ export const useUserStore = defineStore('user', () => {
     return res
   }
 
-  function logout() {
+  async function logout() {
+    try {
+      await logoutApi()
+    } catch {
+      // 忽略：服务端会话可能已失效或网络异常；无论如何都要清本地状态
+    }
     token.value = ''
     userInfo.value = {}
     localStorage.removeItem('token')
