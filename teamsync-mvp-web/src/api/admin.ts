@@ -15,3 +15,11 @@ export function getWordCloud(params?: { startDate?: string; endDate?: string }) 
 export function getMemberDetail(userId: number) {
   return request.get(`/api/admin/member/${userId}`)
 }
+
+export function getUsers() {
+  return request.get('/api/admin/users')
+}
+
+export function updateUserRole(userId: number, role: string) {
+  return request.put(`/api/admin/users/${userId}/role`, { role })
+}

@@ -71,6 +71,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '词云分析' }
       },
       {
+        path: 'users',
+        name: 'UserManage',
+        component: () => import('@/views/admin/UserManage.vue'),
+        meta: { title: '用户管理', requiresSuperAdmin: true }
+      },
+      {
         path: 'member/:id',
         name: 'MemberDetail',
         component: () => import('@/views/admin/MemberDetail.vue'),
@@ -96,7 +102,12 @@ router.beforeEach((to, _from, next) => {
     return
   }
 
-  if (to.meta.requiresAdmin && userInfo.role !== 'ADMIN') {
+  if (to.meta.requiresAdmin && !['ADMIN', 'SUPER_ADMIN'].includes(userInfo.role)) {
+    next('/dashboard')
+    return
+  }
+
+  if (to.meta.requiresSuperAdmin && userInfo.role !== 'SUPER_ADMIN') {
     next('/dashboard')
     return
   }

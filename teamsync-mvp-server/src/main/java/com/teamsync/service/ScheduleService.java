@@ -2,6 +2,7 @@ package com.teamsync.service;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.teamsync.common.Roles;
 import com.teamsync.common.UserContext;
 import com.teamsync.dto.ScheduleDTO;
 import com.teamsync.entity.Achievement;
@@ -103,13 +104,17 @@ public class ScheduleService {
         if (schedule == null) {
             throw new IllegalArgumentException("日程不存在");
         }
+        if (!schedule.getUserId().equals(UserContext.getUserId())) {
+            throw new IllegalArgumentException("无权修改此日程状态");
+        }
         schedule.setStatus(status);
         scheduleMapper.updateById(schedule);
     }
 
     public List<ScheduleVO> getUserSchedules(Long userId, LocalDate date) {
+        userId = resolveReadUserId(userId);
         LambdaQueryWrapper<Schedule> wrapper = new LambdaQueryWrapper<Schedule>()
-                .eq(Schedule::getUserId, userId != null ? userId : UserContext.getUserId());
+                .eq(Schedule::getUserId, userId);
         if (date != null) {
             wrapper.eq(Schedule::getPlanDate, date);
         }
@@ -171,9 +176,7 @@ public class ScheduleService {
     }
 
     public DashboardVO getDashboard(Long userId) {
-        if (userId == null) {
-            userId = UserContext.getUserId();
-        }
+        userId = resolveReadUserId(userId);
         DashboardVO dashboard = new DashboardVO();
 
         List<Schedule> allSchedules = scheduleMapper.selectList(
@@ -309,6 +312,17 @@ public class ScheduleService {
 
         vo.setRecords(records);
         return vo;
+    }
+
+    /**
+     * 读操作归属解析：管理员（ADMIN/SUPER_ADMIN）可查任意用户（requested 为 null 则查自己），
+     * 普通成员强制查自己 —— 堵住 ?userId= 越权读取。
+     */
+    private Long resolveReadUserId(Long requested) {
+        if (Roles.isAdmin(UserContext.getUserRole())) {
+            return requested != null ? requested : UserContext.getUserId();
+        }
+        return UserContext.getUserId();
     }
 
     private String getStatusText(int status) {

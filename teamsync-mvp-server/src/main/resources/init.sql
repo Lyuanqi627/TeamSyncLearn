@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(100) DEFAULT '',
     avatar VARCHAR(500) DEFAULT '',
-    role VARCHAR(20) DEFAULT 'MEMBER',
+    role VARCHAR(20) DEFAULT 'MEMBER',  -- MEMBER / ADMIN / SUPER_ADMIN
     nickname VARCHAR(50) DEFAULT '',
     bio VARCHAR(500) DEFAULT '',
     gender VARCHAR(10) DEFAULT '',
@@ -65,4 +65,4 @@ CREATE TABLE IF NOT EXISTS ai_result (
 );
 
 -- Insert default admin
-INSERT IGNORE INTO sys_user (username, password, role) VALUES ('admin', 'admin123', 'ADMIN');
+INSERT IGNORE INTO sys_user (username, password, role) VALUES ('admin', 'admin123', 'SUPER_ADMIN');

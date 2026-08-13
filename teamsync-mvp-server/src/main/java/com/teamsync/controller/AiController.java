@@ -1,6 +1,7 @@
 package com.teamsync.controller;
 
 import com.teamsync.common.Result;
+import com.teamsync.common.Roles;
 import com.teamsync.common.UserContext;
 import com.teamsync.dto.ScheduleGenerateDTO;
 import com.teamsync.mapper.AiResultMapper;
@@ -33,6 +34,17 @@ public class AiController {
                         .orderByDesc(AiResult::getCreatedAt)
                         .last("LIMIT 1")
         );
+        if (result == null) {
+            return Result.success(null);
+        }
+        // 越权保护：AI 密钥旁路（role==null）放行；管理员可只读全量；普通成员只能看自己的结果。
+        String role = UserContext.getUserRole();
+        if (role == null) {
+            return Result.success(result);
+        }
+        if (!Roles.isAdmin(role) && !result.getUserId().equals(UserContext.getUserId())) {
+            throw new IllegalArgumentException("无权查看该AI结果");
+        }
         return Result.success(result);
     }
 
@@ -50,7 +62,17 @@ public class AiController {
             @RequestParam(required = false) Long userId,
             @RequestParam(defaultValue = "10") int days) {
 
-        if (userId == null) {
+        // 越权保护：旁路（role==null）无会话，必须显式 userId；管理员可查任意；普通成员强制查自己。
+        String role = UserContext.getUserRole();
+        if (role == null) {
+            if (userId == null) {
+                return Result.error(400, "userId 不能为空");
+            }
+        } else if (Roles.isAdmin(role)) {
+            if (userId == null) {
+                userId = UserContext.getUserId();
+            }
+        } else {
             userId = UserContext.getUserId();
         }
         if (userId == null) {
@@ -71,12 +93,22 @@ public class AiController {
      */
     @PostMapping("/schedule/generate")
     public Result<?> generateSchedule(@RequestBody ScheduleGenerateDTO dto) {
-        Long userId = dto.getUserId();
-        if (userId == null) {
+        // 写 owner-only：旁路（role==null）无会话，userId 必填；会话用户只能给自己生成，不可代他人。
+        String role = UserContext.getUserRole();
+        Long userId;
+        if (role == null) {
+            userId = dto.getUserId();
+            if (userId == null) {
+                return Result.error(400, "userId 不能为空");
+            }
+        } else {
+            if (dto.getUserId() != null && !dto.getUserId().equals(UserContext.getUserId())) {
+                return Result.error(400, "无权为该用户生成日程");
+            }
             userId = UserContext.getUserId();
-        }
-        if (userId == null) {
-            return Result.error(401, "userId 不能为空");
+            if (userId == null) {
+                return Result.error(401, "userId 不能为空");
+            }
         }
 
         String title = dto.getTitle();

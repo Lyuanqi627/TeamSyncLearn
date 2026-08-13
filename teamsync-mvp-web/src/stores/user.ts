@@ -7,7 +7,10 @@ export const useUserStore = defineStore('user', () => {
   const userInfo = ref<any>(JSON.parse(localStorage.getItem('userInfo') || '{}'))
 
   const isLoggedIn = computed(() => !!token.value)
-  const isAdmin = computed(() => userInfo.value?.role === 'ADMIN')
+  const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(userInfo.value?.role))
+  const isSuperAdmin = computed(() => userInfo.value?.role === 'SUPER_ADMIN')
+  const roleLabel = computed(() =>
+    ({ SUPER_ADMIN: '超级管理员', ADMIN: '管理员', MEMBER: '成员' } as Record<string, string>)[userInfo.value?.role] || '成员')
   const username = computed(() => userInfo.value?.username || '')
   const displayName = computed(() => userInfo.value?.nickname || userInfo.value?.username || '')
   const avatarUrl = computed(() => {
@@ -64,5 +67,5 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  return { token, userInfo, isLoggedIn, isAdmin, username, displayName, avatarUrl, login, logout, fetchUserInfo }
+  return { token, userInfo, isLoggedIn, isAdmin, isSuperAdmin, roleLabel, username, displayName, avatarUrl, login, logout, fetchUserInfo }
 })

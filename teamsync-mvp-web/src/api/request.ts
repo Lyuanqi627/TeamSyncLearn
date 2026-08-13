@@ -32,7 +32,7 @@ request.interceptors.response.use(
       localStorage.removeItem('userInfo')
       router.push('/login')
     }
-    ElMessage.error(error.message || '请求失败')
+    ElMessage.error(error.response?.data?.msg || error.message || '请求失败')
     return Promise.reject(error)
   }
 )

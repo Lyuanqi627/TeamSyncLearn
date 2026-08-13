@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.teamsync.common.Roles;
 import com.teamsync.common.UserContext;
 import com.teamsync.dto.AchievementDTO;
 import com.teamsync.entity.Achievement;
@@ -207,6 +208,15 @@ public class AchievementService {
     }
 
     public Achievement getByScheduleId(Long scheduleId) {
+        Schedule schedule = scheduleMapper.selectById(scheduleId);
+        if (schedule == null) {
+            throw new IllegalArgumentException("日程不存在");
+        }
+        // 越权保护：普通成员只能查看自己的成果；管理员（ADMIN/SUPER_ADMIN）可只读全量。
+        if (!Roles.isAdmin(UserContext.getUserRole())
+                && !schedule.getUserId().equals(UserContext.getUserId())) {
+            throw new IllegalArgumentException("无权查看该成果");
+        }
         return achievementMapper.selectOne(
                 new LambdaQueryWrapper<Achievement>()
                         .eq(Achievement::getScheduleId, scheduleId)

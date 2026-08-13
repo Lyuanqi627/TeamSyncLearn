@@ -22,6 +22,9 @@
           <span class="user-info">
             <el-avatar :size="32" :icon="UserFilled" />
             <span class="username">{{ userStore.username }}</span>
+            <el-tag :type="userStore.isSuperAdmin ? 'danger' : 'primary'" size="small" effect="plain">
+              {{ userStore.roleLabel }}
+            </el-tag>
           </span>
           <template #dropdown>
             <el-dropdown-item command="logout">退出登录</el-dropdown-item>
@@ -49,6 +52,10 @@
             <el-icon><Cloudy /></el-icon>
             <span>词云分析</span>
           </el-menu-item>
+          <el-menu-item v-if="userStore.isSuperAdmin" index="/admin/users">
+            <el-icon><User /></el-icon>
+            <span>用户管理</span>
+          </el-menu-item>
         </el-menu>
       </aside>
 
@@ -63,7 +70,7 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessageBox } from 'element-plus'
-import { DataAnalysis, Cloudy, Back, UserFilled } from '@element-plus/icons-vue'
+import { DataAnalysis, Cloudy, Back, UserFilled, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
