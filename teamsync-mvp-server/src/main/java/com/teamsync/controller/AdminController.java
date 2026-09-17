@@ -52,6 +52,14 @@ public class AdminController {
         return Result.success();
     }
 
+    /** 删除用户（级联清除其日程/成果/AI 记录）—— 仅最终管理员 */
+    @DeleteMapping("/users/{userId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public Result<Void> deleteUser(@PathVariable Long userId) {
+        adminService.deleteUser(userId);
+        return Result.success();
+    }
+
     @GetMapping("/members")
     public Result<List<SysUser>> listMembers() {
         List<SysUser> users = userMapper.selectList(

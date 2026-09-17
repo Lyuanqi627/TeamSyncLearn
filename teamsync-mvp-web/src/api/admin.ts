@@ -23,3 +23,7 @@ export function getUsers() {
 export function updateUserRole(userId: number, role: string) {
   return request.put(`/api/admin/users/${userId}/role`, { role })
 }
+
+export function deleteUser(userId: number) {
+  return request.delete(`/api/admin/users/${userId}`)
+}
